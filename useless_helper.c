@@ -35,5 +35,5 @@ int main(int argc, const char* argv[])
 		return;
 	}
 
-	ioctl(fd, IOCTL_RESTORE_FILE, &req);
+	return ioctl(fd, IOCTL_RESTORE_FILE, &req);
 }

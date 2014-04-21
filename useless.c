@@ -1,6 +1,3 @@
-/*  
- *  hello-4.c - Demonstrates module documentation.
- */
 #include <linux/module.h>	/* Needed by all modules */
 #include <linux/kernel.h>	/* Needed for KERN_INFO */
 #include <linux/init.h>		/* Needed for the macros */
@@ -14,15 +11,15 @@
 
 #include "useless.h"
 
-#define DRIVER_AUTHOR "Amihai Neiderman"
+#define DRIVER_AUTHOR "Ido Ben-Yair & Amihai Neiderman"
 #define DRIVER_DESC   "A useless file restorer"
 
 #define DEVICE_MINOR 1
 
-
-void handle_ioctl_restore_file(struct useless_restore_req req);
-struct dentry* find_inode(struct fdtable *fdt, unsigned int inode);
-
+int handle_ioctl_restore_file(struct useless_restore_req req);
+struct dentry* fdtable_find_inode(struct fdtable *fdt, unsigned long inode);
+struct dentry* task_find_file(struct task_struct *task, unsigned long inode);
+int dentry_restore(struct dentry *dentry);
 
 struct useless {
 	dev_t dev;
@@ -39,28 +36,28 @@ int useless_ioctl(struct inode *inode, struct file *file, unsigned int ioctl_num
 	int result = 0;
 	struct useless_restore_req req;
 
-
 	switch (ioctl_num) 
 	{
-		case IOCTL_RESTORE_FILE:
-		{
-			result = copy_from_user(&req, (void*)ioctl_param, sizeof(struct useless_restore_req));
+	case IOCTL_RESTORE_FILE:
+		result = copy_from_user(&req, (void*)ioctl_param, sizeof(struct useless_restore_req));
 
-			if (result)
-			{
-				printk(KERN_ERR "Your ioctl sucks\n");
-			}
-	
-			handle_ioctl_restore_file(req);
+		if (result)
+		{
+			printk(KERN_DEBUG "Unable to copy request parameters from userspace!\n");
+			return -EFAULT;
 		}
+
+		return handle_ioctl_restore_file(req);
+
+	default:
+		return -EFAULT;
 	}
-	return 0;
 }
 
-struct dentry* find_inode(struct fdtable *fdt, unsigned int inode)
+// Returns with incremented reference to dentry
+struct dentry* fdtable_find_inode(struct fdtable *fdt, unsigned long inode)
 {
 	int i, j;
-	struct dentry *d;
 	j = 0;
 
 	for (;;) 
@@ -77,124 +74,102 @@ struct dentry* find_inode(struct fdtable *fdt, unsigned int inode)
 				struct file *file = rcu_dereference(fdt->fd[i]);
 				if (file) 
 				{
-					if (inode == file->f_path.dentry->d_inode->i_ino) 
+					struct dentry *dentry = dget(file->f_path.dentry);
+
+					if (inode == dentry->d_inode->i_ino) 
 					{
-						printk(KERN_INFO "so inode!\n");
-						d = file->f_path.dentry;
-						return d;
+						printk(KERN_DEBUG "Found inode #%lu!\n", dentry->d_inode->i_ino);
+						return dentry;
 					}
+
+					dput(dentry);
 				}
 			}
 			i++;
 			set >>= 1;
 		}
-		printk(KERN_INFO "\n");
 	}
 	return 0;
 }
 
-
-
-struct path* find_path(struct fdtable *fdt, unsigned int inode)
+int handle_ioctl_restore_file(struct useless_restore_req req)
 {
-	int i, j;
-	struct path *d;
-	j = 0;
+	struct task_struct *task = NULL;
+	struct dentry *dentry = NULL;
+	int retval = 0;
 
-	for (;;) 
-	{
-		unsigned long set;
-		i = j * __NFDBITS;
-		if (i >= fdt->max_fds)
-			break;
-		set = fdt->open_fds->fds_bits[j++];
-		while (set) 
-		{
-			if (set & 1) 
-			{
-				struct file *file = rcu_dereference(fdt->fd[i]);
-				if (file) 
-				{
-					if (inode == file->f_path.dentry->d_inode->i_ino) 
-					{
-						printk(KERN_INFO "so inode!\n");
-						d = &file->f_path;
-						return d;
-					}
-				}
-			}
-			i++;
-			set >>= 1;
-		}
-		printk(KERN_INFO "\n");
-	}
-	return 0;
-}
+	printk(KERN_DEBUG "Got file restore request! pid=%du, inode=%lu\n", req.pid, req.inode);
 
-
-void handle_ioctl_restore_file(struct useless_restore_req req)
-{
-	struct task_struct *task;
-	struct dentry *dent = 0;
-	struct nameidata nd;
-	struct filename *to;
-	int err;
-
-	printk(KERN_INFO "got restore request! pid=%d, inode=%d\n", req.pid, req.inode);
+	//read_lock(&tasklist_lock);
 
 	for_each_process(task)
-	{
 		if (task->pid == req.pid) 
 		{
-			printk(KERN_INFO "wow! such pid!\n");
+			printk(KERN_DEBUG "Found process!\n");
 			break;
 		}
-	}
 
-	if (task != NULL) 
+	//read_unlock(&tasklist_lock);
+
+	if (task) 
 	{
-		spin_lock(&task->files->file_lock);
-
-		dent = find_inode(files_fdtable(task->files), req.inode);
-		struct path *p = find_path(files_fdtable(task->files), req.inode);
-		
-
-		if (p != NULL) 
-		if (dent != NULL) 
-		{
-			struct dentry *child;
-			struct dentry *d;
-
-			printk(KERN_INFO "inode file name: %s\n", dent->d_name.name);
-			printk(KERN_INFO "inode parent name: %s\n", dent->d_parent->d_name.name);
-
-//			char *name = "blah";
-//			printk(KERN_INFO "fname:%s\n", name);
-//			err = vfs_path_lookup(dent->d_parent, p->mnt,name, LOOKUP_PARENT, &nd);
-//			printk(KERN_INFO "lookup:%d, depth:%d\n", err, nd.depth);
-
-//			printk(KERN_INFO "nd path name: %s, inode:%d\n", nd.path.dentry->d_name.name, nd.path.dentry->d_inode->i_ino);
-
-			d = d_alloc_name(dent->d_parent,"RESTORED");
-
-			dent->d_parent->d_inode->i_op->lookup(dent->d_parent->d_inode, d,0);
-
-			inc_nlink(dent->d_inode);
-			err = dent->d_parent->d_inode->i_op->link(dent, dent->d_parent->d_inode, d);
-
-			printk(KERN_INFO "link:%d\n", err);
-			printk(KERN_INFO "link func: %pF\n", dent->d_parent->d_inode->i_op->link);
-
-
-// 			list_for_each_entry(child, &dent->d_parent->d_subdirs, d_u.d_child)
-//    				printk(KERN_INFO "pname:%s", child->d_name.name);
-//			printk(KERN_INFO "------------\n");   			
-
-		}
-		mutex_unlock(&nd.path.dentry->d_inode->i_mutex);
-		spin_unlock(&task->files->file_lock);
+		get_task_struct(task);
+		dentry = task_find_file(task, req.inode);
+		put_task_struct(task);
 	}
 
+	if (dentry)
+	{
+		retval = dentry_restore(dentry);
+		dput(dentry);
+		return retval;
+	}
+
+	return -EFAULT;
+}
+
+struct dentry* task_find_file(struct task_struct *task, unsigned long inode)
+{
+	struct files_struct *files = NULL;
+	struct dentry *dentry = NULL;
+
+	files = task->files;
+	atomic_inc(&files->count);
+
+	if (!files) 
+		return NULL;
+
+	dentry = fdtable_find_inode(files_fdtable(task->files), inode);
+
+	//mutex_unlock(&nd.path.dentry->d_inode->i_mutex);
+	atomic_dec(&files->count);
+	return dentry;
+}
+
+int dentry_restore(struct dentry *dentry)
+{
+	int err = 0;
+	if (dentry != NULL) 
+	{
+		struct dentry *d;
+
+		printk(KERN_DEBUG "inode file name: %s\n", dentry->d_name.name);
+		printk(KERN_DEBUG "inode parent name: %s\n", dentry->d_parent->d_name.name);
+
+		d = d_alloc_name(dentry->d_parent, "RESTORED");
+
+		dentry->d_parent->d_inode->i_op->lookup(dentry->d_parent->d_inode, d, 0);
+
+		// Increment the link count so that link() works, perform the link and then
+		// Decrement it back, marking the inode as dirty.
+		inc_nlink(dentry->d_inode);
+		err = dentry->d_parent->d_inode->i_op->link(dentry, dentry->d_parent->d_inode, d);
+		drop_nlink(dentry->d_inode);
+
+		return err;
+	}
+
+	return -EFAULT;
 }
 
 int useless_release(struct inode *inode, struct file *file)
@@ -218,7 +193,7 @@ static int __init init_useless(void)
 
 	result = alloc_chrdev_region(&useless.dev, DEVICE_MINOR, 1, "useless");
 
-	if (result < 0) 
+	if (result < 0)
 	{
 		printk(KERN_WARNING "can't get device number for useless module!\n");
 		return result;

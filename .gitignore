@@ -1,0 +1,9 @@
+*.o
+*.ko*
+*.mod*
+*.cmd
+
+modules.order
+Module.symvers
+
+useless_helper

@@ -3,6 +3,6 @@
 struct useless_restore_req
 {
 	unsigned int pid;
-	unsigned int inode;
+	unsigned long inode;
 };
 
