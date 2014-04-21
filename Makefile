@@ -1,6 +1,6 @@
 obj-m += useless.o
 
-userspace:
+helper:
 	gcc useless_helper.c -o useless_helper -g
 
 all:
