@@ -22,7 +22,7 @@ test_file_name = test_file.name
 test_file_dir_name = os.path.dirname(test_file_name)
 test_string = random_string(10)
 
-print "useless unit test:"
+print "inode_restorer unit test:"
 debug_print(["pid: %(pid)s", "test file: %(test_file_name)s", "test contents: %(test_string)s"])
 print
 
@@ -35,8 +35,8 @@ inode = os.stat(test_file.name).st_ino
 debug_print("Removing temp file with inode #%(inode)s...")
 os.remove(test_file_name)
 
-debug_print("Running useless_helper...")
-retval = subprocess.call(["./useless_helper", str(pid), str(inode)])
+debug_print("Running restore_helper...")
+retval = subprocess.call(["./restorer_helper", str(pid), str(inode)])
 
 if retval != 0:
     debug_print("Helper failed with value %(retval)s")

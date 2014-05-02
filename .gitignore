@@ -6,4 +6,4 @@
 modules.order
 Module.symvers
 
-useless_helper
+restorer_helper

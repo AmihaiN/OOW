@@ -1,4 +1,4 @@
-#include "useless.h"
+#include "inode_restorer.h"
 
 #include <fcntl.h>      /* open */ 
 #include <unistd.h>     /* exit */
@@ -9,10 +9,10 @@
 int main(int argc, const char* argv[])
 {
 	int fd;
-	struct useless_restore_req req;
+	struct inode_restorer_restore_req req;
 
 
-	fd = open("useless", 0);
+	fd = open("inode_restorer", 0);
 
 	if (fd < 0) 
 	{

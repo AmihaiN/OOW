@@ -9,37 +9,37 @@
 #include <linux/namei.h>
 #include <linux/fdtable.h>
 
-#include "useless.h"
+#include "inode_restorer.h"
 
 #define DRIVER_AUTHOR "Ido Ben-Yair & Amihai Neiderman"
-#define DRIVER_DESC   "A useless file restorer"
+#define DRIVER_DESC   "A inode_restorer file restorer"
 
 #define DEVICE_MINOR 1
 
-int handle_ioctl_restore_file(struct useless_restore_req req);
+int handle_ioctl_restore_file(struct inode_restorer_restore_req req);
 struct dentry* fdtable_find_inode(struct fdtable *fdt, unsigned long inode);
 struct dentry* task_find_file(struct task_struct *task, unsigned long inode);
 int dentry_restore(struct dentry *dentry);
 
-struct useless {
+struct inode_restorer {
 	dev_t dev;
 	struct cdev cdev;
-} useless;
+} inode_restorer;
 
-int useless_open(struct inode *inode, struct file *file)
+int inode_restorer_open(struct inode *inode, struct file *file)
 {
 	return 0;
 }
 
-int useless_ioctl(struct inode *inode, struct file *file, unsigned int ioctl_num, unsigned long ioctl_param)
+int inode_restorer_ioctl(struct inode *inode, struct file *file, unsigned int ioctl_num, unsigned long ioctl_param)
 {
 	int result = 0;
-	struct useless_restore_req req;
+	struct inode_restorer_restore_req req;
 
 	switch (ioctl_num) 
 	{
 	case IOCTL_RESTORE_FILE:
-		result = copy_from_user(&req, (void*)ioctl_param, sizeof(struct useless_restore_req));
+		result = copy_from_user(&req, (void*)ioctl_param, sizeof(struct inode_restorer_restore_req));
 
 		if (result)
 		{
@@ -92,7 +92,7 @@ struct dentry* fdtable_find_inode(struct fdtable *fdt, unsigned long inode)
 	return 0;
 }
 
-int handle_ioctl_restore_file(struct useless_restore_req req)
+int handle_ioctl_restore_file(struct inode_restorer_restore_req req)
 {
 	struct task_struct *task = NULL;
 	struct dentry *dentry = NULL;
@@ -172,55 +172,55 @@ int dentry_restore(struct dentry *dentry)
 	return -EFAULT;
 }
 
-int useless_release(struct inode *inode, struct file *file)
+int inode_restorer_release(struct inode *inode, struct file *file)
 {
 	return 0;
 }
 
-struct file_operations useless_fops = {
+struct file_operations inode_restorer_fops = {
 	.owner = THIS_MODULE,
-	.ioctl = useless_ioctl,
-	.open = useless_open,
-	.release = useless_release,
+	.ioctl = inode_restorer_ioctl,
+	.open = inode_restorer_open,
+	.release = inode_restorer_release,
 };
 
 
-static int __init init_useless(void)
+static int __init init_inode_restorer(void)
 {
 	int result = 0;
 
-	printk(KERN_INFO "initializing useless module\n");
+	printk(KERN_INFO "initializing inode_restorer module\n");
 
-	result = alloc_chrdev_region(&useless.dev, DEVICE_MINOR, 1, "useless");
+	result = alloc_chrdev_region(&inode_restorer.dev, DEVICE_MINOR, 1, "inode_restorer");
 
 	if (result < 0)
 	{
-		printk(KERN_WARNING "can't get device number for useless module!\n");
+		printk(KERN_WARNING "can't get device number for inode_restorer module!\n");
 		return result;
 	}
 
-	cdev_init(&useless.cdev, &useless_fops);
-	useless.cdev.owner = THIS_MODULE;		
-	result = cdev_add(&useless.cdev, MKDEV(MAJOR(useless.dev), MINOR(useless.dev)), 1);
+	cdev_init(&inode_restorer.cdev, &inode_restorer_fops);
+	inode_restorer.cdev.owner = THIS_MODULE;		
+	result = cdev_add(&inode_restorer.cdev, MKDEV(MAJOR(inode_restorer.dev), MINOR(inode_restorer.dev)), 1);
 	/* Fail gracefully if need be */
 
 	if (result)
-		printk(KERN_NOTICE "Error %d adding useless device", result);
+		printk(KERN_NOTICE "Error %d adding inode_restorer device", result);
 
 	return 0;
 }
 
-static void __exit cleanup_useless(void)
+static void __exit cleanup_inode_restorer(void)
 {
-	printk(KERN_INFO "useless exit\n");
+	printk(KERN_INFO "inode_restorer exit\n");
 
-	cdev_del(&useless.cdev);
+	cdev_del(&inode_restorer.cdev);
 
-	unregister_chrdev_region(useless.dev, 1);
+	unregister_chrdev_region(inode_restorer.dev, 1);
 }
 
-module_init(init_useless);
-module_exit(cleanup_useless);
+module_init(init_inode_restorer);
+module_exit(cleanup_inode_restorer);
 
 /*  
  *  You can use strings, like this:
